@@ -1,5 +1,6 @@
 # ============================================================
 # constraints.tcl
+# Project-specific constraints.
 # ============================================================
 
-add_ooc_xdc "$XDC_DIR/right_ooc.xdc"
+add_ooc_xdc "$CONSTRAINTS_DIR/wstack.xdc"

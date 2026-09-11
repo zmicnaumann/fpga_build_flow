@@ -1,6 +1,8 @@
 # ============================================================
-# sources.tcl
-# Project-specific source list.
+# generated_sources.tcl
+# Project-specific generated sources.
 # ============================================================
 
-add_systemverilog "$RTL_DIR/wstack.sv"
+set BD_TCL "$BD_DIR/wstack.tcl"
+
+generate_bd $BD_TCL
