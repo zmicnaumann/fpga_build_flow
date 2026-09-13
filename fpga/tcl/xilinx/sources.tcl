@@ -1,4 +1,23 @@
+# This file is a shared library. 
+# Using namespace of sources, to prevent possible command aliasing across tool variants. 
+# When calling functions from this file, use the namespace prefix, e.g. sources::add_rtl, sources::add_xci, etc.
+# This meets the requirement of simplifying project vs non-project mode, and easily expandable for other tool vendor flows. 
+# As of now the 3 BUILD_MODEs are project, nonproject, and dry_run.
+
+
+# This file is broken down into 5 main sections.
+# 1. Logging and BUILD_MODE checks
+# 2. Resolving source files from directories and file extensions
+# 3. Adding RTL, XCI, BD, and XDC sources to the build flow
+# 4. Generating XCI and BD targets
+# 5. Miscellaneous functions for setting top and updating compile order
+
 namespace eval sources {}
+
+
+############################################################
+# 1. Logging and BUILD_MODE checks
+############################################################
 
 proc sources::log {msg} {
     puts "INFO: $msg"
@@ -15,6 +34,11 @@ proc sources::is_nonproject {} {
 proc sources::is_dry_run {} {
     return [expr {$::BUILD_MODE eq "dry_run"}]
 }
+
+
+############################################################
+# 2. Resolving source files from directories and file extensions
+############################################################
 
 proc sources::resolve_files {entries extensions} {
     set files {}
@@ -40,6 +64,11 @@ proc sources::resolve_files {entries extensions} {
 
     return [lsort -unique $files]
 }
+
+
+############################################################
+# 3. Adding RTL, XCI, BD, and XDC sources to the build flow
+############################################################
 
 proc sources::add_rtl {entries} {
 
@@ -71,6 +100,7 @@ proc sources::add_rtl {entries} {
 
                 ".vhd" -
                 ".vhdl" {
+                    # We may need to add a check for VHDL version, but Vivado defaults to 2008.
                     read_vhdl $f
                 }
             }
@@ -97,6 +127,44 @@ proc sources::add_xci {entries} {
     }
 }
 
+proc sources::add_bd {entries} {
+
+    set files [sources::resolve_files $entries {.tcl}]
+
+    foreach f $files {
+
+        if {[sources::is_dry_run]} {
+            sources::log "DRY RUN: source BD Tcl: $f"
+            continue
+        }
+
+        source $f
+    }
+}
+
+proc sources::add_constraints {entries} {
+
+    set files [sources::resolve_files $entries {.xdc}]
+
+    foreach f $files {
+
+        if {[sources::is_dry_run]} {
+            sources::log "DRY RUN: add constraint: $f"
+            continue
+        }
+
+        if {[sources::is_project]} {
+            add_files -fileset constrs_1 $f
+        } elseif {[sources::is_nonproject]} {
+            read_xdc $f
+        }
+    }
+}
+
+############################################################
+# 4. Generating XCI and BD targets
+############################################################
+
 proc sources::generate_xci {entries} {
 
     set files [sources::resolve_files $entries {.xci}]
@@ -122,24 +190,29 @@ proc sources::generate_xci {entries} {
     }
 }
 
-proc sources::add_constraints {entries} {
+proc sources::generate_bd {bd_names} {
 
-    set files [sources::resolve_files $entries {.xdc}]
-
-    foreach f $files {
+    foreach bd_name $bd_names {
 
         if {[sources::is_dry_run]} {
-            sources::log "DRY RUN: add constraint: $f"
+            sources::log "DRY RUN: generate BD: $bd_name"
             continue
         }
 
-        if {[sources::is_project]} {
-            add_files -fileset constrs_1 $f
-        } elseif {[sources::is_nonproject]} {
-            read_xdc $f
+        set bd_file [get_files -quiet ${bd_name}.bd]
+
+        if {[llength $bd_file] == 0} {
+            error "Could not find block design: $bd_name"
         }
+
+        generate_target all $bd_file
     }
 }
+
+
+############################################################
+# 4. Miscellaneous functions for setting top and updating compile order
+############################################################
 
 proc sources::set_top {top} {
 
@@ -172,38 +245,4 @@ proc sources::update_compile_order {} {
     #
     # Nothing needed in non-project mode.
     #
-}
-
-proc sources::add_bd {entries} {
-
-    set files [sources::resolve_files $entries {.tcl}]
-
-    foreach f $files {
-
-        if {[sources::is_dry_run]} {
-            sources::log "DRY RUN: source BD Tcl: $f"
-            continue
-        }
-
-        source $f
-    }
-}
-
-proc sources::generate_bd {bd_names} {
-
-    foreach bd_name $bd_names {
-
-        if {[sources::is_dry_run]} {
-            sources::log "DRY RUN: generate BD: $bd_name"
-            continue
-        }
-
-        set bd_file [get_files -quiet ${bd_name}.bd]
-
-        if {[llength $bd_file] == 0} {
-            error "Could not find block design: $bd_name"
-        }
-
-        generate_target all $bd_file
-    }
 }
